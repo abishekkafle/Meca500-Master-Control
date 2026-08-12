@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>6 DOF Robot Arm Control</title>
+    <style>
+        body { font-family: Arial; text-align: center; }
+        .control-panel { display: flex; justify-content: center; flex-wrap: wrap; }
+        .control { margin: 10px; }
+        button { font-size: 18px; padding: 5px 10px; }
+        .value { font-size: 18px; }
+    </style>
+</head>
+<body>
+    <h1>6 DOF Robot Arm Control</h1>
+    <div class="control-panel">
+        {% for axis, value in arm_state.items() %}
+        <div class="control">
+            <h3>{{ axis.upper() }}</h3>
+            <button onclick="updateAxis('{{ axis }}', -0.1)">-</button>
+            <span class="value" id="{{ axis }}-value">{{ value }}</span>
+            <button onclick="updateAxis('{{ axis }}', 0.1)">+</button>
+        </div>
+        {% endfor %}
+    </div>
+    <button onclick="sendData()">Send Data & Plot</button>
+    <br><br>
+    <img id="plot" src="/plot" width="600" alt="Robot Arm Plot" onerror="this.src=''">
+
+    <script>
+        function updateAxis(axis, increment) {
+            fetch('/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ axis, increment })
+            })
+            .then(res => res.json())
+            .then(data => document.getElementById(`${axis}-value`).innerText = data.new_value);
+        }
+
+        function sendData() {
+            fetch('/send', { method: 'POST' })
+                .then(res => res.json())
+                .then(() => document.getElementById('plot').src = `/plot?${Date.now()}`);
+        }
+    </script>
+</body>
+</html>
