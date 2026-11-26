@@ -6,12 +6,13 @@ An integrated robotics & automation digital twin platform for the **Mecademic Me
 
 ---
 
-## Digital Twin Previews
+## Physical Lab Hardware vs. 3D Digital Twin
 
-### 1. 3D 6-DOF Arm Digital Twin, Keep-Out Fixture & Pre-Flight Safety Audit
-![Meca500 3D Digital Twin](assets/meca500_digital_twin.png)
+| Real Meca500 DIW Hardware Setup | Interactive Three.js 3D Digital Twin |
+| :---: | :---: |
+| ![Real Meca500 DIW Hardware](assets/meca500_real_hardware.jpg) | ![Meca500 3D Digital Twin](assets/meca500_digital_twin.png) |
 
-### 2. Live Joint Trajectories (J1–J6) & Yoshikawa Manipulability Telemetry
+### Live Joint Trajectories (J1–J6) & Yoshikawa Manipulability Telemetry
 ![Meca500 Telemetry and Singularity Profile](assets/meca500_telemetry.png)
 
 ---

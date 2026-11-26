@@ -7,17 +7,17 @@ const M = window.MecaTwin;
 const el = (id) => document.getElementById(id);
 
 const state = {
-  // Iconic Meca500 showcase posture matching the Mecademic reference photo!
-  jointsDeg: [0, -24, 22, 0, 52, 0],
-  pose: { x: 185, y: 0, z: 95, a: 0, b: 90, c: 0 },
+  // Showcase DIW posture: horizontal J6 flange with vertical blue syringe poised right over the blue substrate!
+  jointsDeg: [0, 8, 52, 0, -60, 0],
+  pose: { x: 215, y: 0, z: 32, a: 0, b: 0, c: 0 },
   pathMode: "shape",
   shape: "spiral",
   pattern: "rectilinear",
-  pathX: 145,
-  pathY: -30,
-  pathZ: 60,
-  size: 55,
-  zStep: 4,
+  pathX: 195,
+  pathY: -28,
+  pathZ: 25,
+  size: 56,
+  zStep: 3,
   layers: 4,
   density: 55,
   feedRate: 45,
@@ -27,8 +27,8 @@ const state = {
   isPlaying: false,
   step: 0,
   timer: null,
-  obstacle: { enabled: true, xMin: 170, xMax: 205, yMin: 12, yMax: 45, zMin: 0, zMax: 80 },
-  logs: ["[TWIN] Meca500 R3/R4 6-DOF Digital Twin initialized (Three.js CAD Model + DH Kinematics + Jacobian + Safety Interlocks)."],
+  obstacle: { enabled: true, xMin: 232, xMax: 268, yMin: 18, yMax: 52, zMin: 23, zMax: 78 },
+  logs: ["[TWIN] Meca500 R3/R4 DIW Digital Twin initialized (Blue Syringe Printhead + Linear Actuator + 80/20 Bench)."],
 };
 
 let viewerMain = null;
@@ -256,9 +256,9 @@ function init() {
   }
 
   el("resetJointsBtn").addEventListener("click", () => {
-    state.jointsDeg = [0, -24, 22, 0, 52, 0];
+    state.jointsDeg = [0, 8, 52, 0, -60, 0];
     syncJointSliders();
-    log("Joints reset to showcase posture.");
+    log("Joints reset to DIW print-ready posture.");
     refreshAllVisuals();
   });
 

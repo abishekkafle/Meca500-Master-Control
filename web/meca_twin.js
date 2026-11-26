@@ -16,7 +16,8 @@ const LINK_LENGTHS = {
   elbow_z: 38.0,
   forearm: 120.0,
   wrist: 70.0,
-  extruder_offset: 32.0,
+  nozzle_dx: 68.0,   // DIW syringe nozzle forward offset from J6 flange
+  nozzle_dz: -58.0,  // DIW syringe nozzle downward offset from J6 flange
 };
 
 // Meca500 official joint limits (degrees) & max angular speeds (deg/s)
@@ -122,10 +123,10 @@ function forwardKinematics(jointsRad) {
   const flangePos = [T[0][3], T[1][3], T[2][3]];
   positions.push(flangePos); // J6 flange (index 5)
 
-  // Tool tip extending along flange +X
-  const T_tip = matMul4(T, trans(LINK_LENGTHS.extruder_offset, 0, 0));
+  // DIW Syringe Nozzle Tip transform in J6 frame (dx = +68, dz = -58)
+  const T_tip = matMul4(T, trans(LINK_LENGTHS.nozzle_dx, 0, LINK_LENGTHS.nozzle_dz));
   const extruderTip = [T_tip[0][3], T_tip[1][3], T_tip[2][3]];
-  positions.push(extruderTip); // Tool tip (index 6)
+  positions.push(extruderTip); // Nozzle tip (index 6)
 
   const sy = Math.sqrt(T[0][0] * T[0][0] + T[1][0] * T[1][0]);
   let aRot, bRot, cRot;
@@ -140,9 +141,9 @@ function forwardKinematics(jointsRad) {
   }
 
   const pose = {
-    x: +flangePos[0].toFixed(2),
-    y: +flangePos[1].toFixed(2),
-    z: +flangePos[2].toFixed(2),
+    x: +extruderTip[0].toFixed(2),
+    y: +extruderTip[1].toFixed(2),
+    z: +extruderTip[2].toFixed(2),
     a: +(aRot * RAD2DEG).toFixed(2),
     b: +(bRot * RAD2DEG).toFixed(2),
     c: +(cRot * RAD2DEG).toFixed(2),
@@ -152,17 +153,18 @@ function forwardKinematics(jointsRad) {
 }
 
 /**
- * Closed-form geometric Inverse Kinematics for upright Meca500 R3/R4.
- * Keeps wrist pointing downward toward build plate (total pitch = pitchDeg, default 90° down).
+ * Closed-form geometric Inverse Kinematics for upright Meca500 R3/R4 with vertical DIW syringe head.
+ * Default pitch bDeg = 0° keeps the J6 flange horizontal so the vertical syringe nozzle points straight down (-Z).
  */
-function inverseKinematics(x, y, z, aDeg = 0, bDeg = 90, cDeg = 0) {
+function inverseKinematics(x, y, z, aDeg = 0, bDeg = 0, cDeg = 0) {
   const q1 = Math.atan2(y, x);
-  const pitchRad = bDeg * DEG2RAD; // 90 deg = flange pointing straight down (-Z)
+  const pitchRad = bDeg * DEG2RAD; // 0 deg = flange horizontal -> vertical syringe nozzle pointing straight down
 
-  // Wrist center backed off along flange axis
+  // Back off from nozzle tip (dx=68, dz=-58) + wrist (70) to J5 wrist center
+  const totalForward = LINK_LENGTHS.wrist + LINK_LENGTHS.nozzle_dx;
   const rTarget = Math.hypot(x, y);
-  const wr = rTarget - LINK_LENGTHS.wrist * Math.cos(pitchRad);
-  const wz = z + LINK_LENGTHS.wrist * Math.sin(pitchRad);
+  const wr = rTarget - (totalForward * Math.cos(pitchRad) + LINK_LENGTHS.nozzle_dz * Math.sin(pitchRad));
+  const wz = z - (-totalForward * Math.sin(pitchRad) + LINK_LENGTHS.nozzle_dz * Math.cos(pitchRad));
 
   const L1 = LINK_LENGTHS.upper_arm;
   const L2eff = Math.hypot(LINK_LENGTHS.forearm, LINK_LENGTHS.elbow_z);
