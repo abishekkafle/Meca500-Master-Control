@@ -1,21 +1,23 @@
 /**
- * Interactive UI controller for the Meca500 6-DOF Automation Digital Twin.
+ * Interactive UI controller for the Meca500 6-DOF Automation Digital Twin
+ * with realistic Three.js machined-aluminum 3D robot rendering.
  */
 
 const M = window.MecaTwin;
 const el = (id) => document.getElementById(id);
 
 const state = {
-  jointsDeg: [0, -15, 35, 0, 55, 0],
-  pose: { x: 185, y: -35, z: 75, a: -95, b: 79, c: 33 },
+  // Iconic Meca500 showcase posture matching the Mecademic reference photo!
+  jointsDeg: [0, -24, 22, 0, 52, 0],
+  pose: { x: 185, y: 0, z: 95, a: 0, b: 90, c: 0 },
   pathMode: "shape",
   shape: "spiral",
   pattern: "rectilinear",
-  pathX: 165,
-  pathY: -35,
-  pathZ: 65,
+  pathX: 145,
+  pathY: -30,
+  pathZ: 60,
   size: 55,
-  zStep: 3,
+  zStep: 4,
   layers: 4,
   density: 55,
   feedRate: 45,
@@ -25,9 +27,12 @@ const state = {
   isPlaying: false,
   step: 0,
   timer: null,
-  obstacle: { enabled: true, xMin: 180, xMax: 215, yMin: 5, yMax: 40, zMin: 0, zMax: 85 },
-  logs: ["[TWIN] Meca500 6-DOF Automation Digital Twin initialized (DH Kinematics + Jacobian + Safety Interlocks)."],
+  obstacle: { enabled: true, xMin: 170, xMax: 205, yMin: 12, yMax: 45, zMin: 0, zMax: 80 },
+  logs: ["[TWIN] Meca500 R3/R4 6-DOF Digital Twin initialized (Three.js CAD Model + DH Kinematics + Jacobian + Safety Interlocks)."],
 };
+
+let viewerMain = null;
+let viewerExec = null;
 
 function log(msg) {
   const ts = new Date().toLocaleTimeString();
@@ -40,39 +45,6 @@ function jointsRad() {
   return state.jointsDeg.map((d) => (d * Math.PI) / 180);
 }
 
-function buildObstacleTraces() {
-  const o = state.obstacle;
-  if (!o.enabled) return [];
-  const x = [o.xMin, o.xMax, o.xMax, o.xMin, o.xMin, o.xMax, o.xMax, o.xMin];
-  const y = [o.yMin, o.yMin, o.yMax, o.yMax, o.yMin, o.yMin, o.yMax, o.yMax];
-  const z = [o.zMin, o.zMin, o.zMin, o.zMin, o.zMax, o.zMax, o.zMax, o.zMax];
-  return [
-    {
-      type: "mesh3d",
-      x, y, z,
-      i: [7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2],
-      j: [3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3],
-      k: [0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
-      opacity: 0.28,
-      color: "#ef4444",
-      name: "Keep-Out Fixture",
-    },
-  ];
-}
-
-function buildPlateTrace() {
-  return {
-    type: "mesh3d",
-    x: [110, 260, 260, 110],
-    y: [-80, -80, 80, 80],
-    z: [0, 0, 0, 0],
-    i: [0, 0], j: [1, 2], k: [2, 3],
-    opacity: 0.18,
-    color: "#38bdf8",
-    name: "Build Plate (Z=0)",
-  };
-}
-
 function renderKPIs() {
   const fk = M.forwardKinematics(jointsRad());
   const manip = M.computeManipulability(jointsRad());
@@ -83,7 +55,7 @@ function renderKPIs() {
 
   el("kpiGrid").innerHTML = `
     <div class="kpi">
-      <div class="kpi-label">TCP Position (mm)</div>
+      <div class="kpi-label">Flange TCP (mm)</div>
       <div class="kpi-val" style="font-size:1.05rem;">${fk.pose.x}, ${fk.pose.y}, ${fk.pose.z}</div>
       <div class="kpi-sub">Euler A/B/C: ${fk.pose.a}° / ${fk.pose.b}° / ${fk.pose.c}°</div>
     </div>
@@ -115,73 +87,17 @@ function renderKPIs() {
   `;
 }
 
-function renderArmPlot(targetDivId, showDeposited = false) {
-  const fk = M.forwardKinematics(jointsRad());
-  const armPts = fk.positions.slice(0, -1);
-  const tipPts = fk.positions.slice(-2);
-
-  const traces = [
-    buildPlateTrace(),
-    ...buildObstacleTraces(),
-    {
-      x: armPts.map((p) => p[0]),
-      y: armPts.map((p) => p[1]),
-      z: armPts.map((p) => p[2]),
-      type: "scatter3d",
-      mode: "lines+markers",
-      line: { width: 9, color: "#0ea5e9" },
-      marker: { size: 5, color: "#38bdf8" },
-      name: "Meca500 Links",
-    },
-    {
-      x: tipPts.map((p) => p[0]),
-      y: tipPts.map((p) => p[1]),
-      z: tipPts.map((p) => p[2]),
-      type: "scatter3d",
-      mode: "lines+markers",
-      line: { width: 6, color: "#f97316" },
-      marker: { size: 4, color: "#fb923c" },
-      name: "Extruder Nozzle",
-    },
-  ];
-
-  if (state.waypoints.length) {
-    traces.push({
-      x: state.waypoints.map((p) => p[0]),
-      y: state.waypoints.map((p) => p[1]),
-      z: state.waypoints.map((p) => p[2]),
-      type: "scatter3d",
-      mode: "lines",
-      line: { width: 3, color: showDeposited ? "rgba(148,163,184,0.35)" : "#14b8a6" },
-      name: "Planned Path",
-    });
+function update3DViewers() {
+  if (viewerMain) {
+    viewerMain.setJointsDeg(state.jointsDeg);
+    viewerMain.setObstacle(state.obstacle);
+    viewerMain.setToolpath(state.waypoints, 0);
   }
-
-  if (showDeposited && state.step > 0) {
-    const dep = state.waypoints.slice(0, state.step + 1);
-    traces.push({
-      x: dep.map((p) => p[0]),
-      y: dep.map((p) => p[1]),
-      z: dep.map((p) => p[2]),
-      type: "scatter3d",
-      mode: "lines",
-      line: { width: 6, color: "#22c55e" },
-      name: "Deposited Material",
-    });
+  if (viewerExec) {
+    viewerExec.setJointsDeg(state.jointsDeg);
+    viewerExec.setObstacle(state.obstacle);
+    viewerExec.setToolpath(state.waypoints, state.step);
   }
-
-  Plotly.react(targetDivId, traces, {
-    margin: { l: 0, r: 0, t: 0, b: 0 },
-    paper_bgcolor: "transparent",
-    legend: { orientation: "h", y: 1.02, font: { color: "#cbd5e1", size: 11 } },
-    scene: {
-      bgcolor: "#0b1220",
-      xaxis: { range: [-150, 320], title: "X (mm)", color: "#94a3b8", gridcolor: "#1e293b" },
-      yaxis: { range: [-200, 200], title: "Y (mm)", color: "#94a3b8", gridcolor: "#1e293b" },
-      zaxis: { range: [0, 360], title: "Z (mm)", color: "#94a3b8", gridcolor: "#1e293b" },
-      camera: { eye: { x: 1.45, y: 1.35, z: 0.95 } },
-    },
-  }, { responsive: true });
 }
 
 function renderTelemetryCharts() {
@@ -222,7 +138,7 @@ function renderTelemetryCharts() {
     font: { color: "#cbd5e1" },
     xaxis: { title: "Time (s)", gridcolor: "#1e293b" },
     yaxis: { title: "Yoshikawa Index", gridcolor: "#1e293b" },
-    shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 0.12, y1: 0.12, line: { color: "#ef4444", dash: "dash" } }],
+    shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 0.14, y1: 0.14, line: { color: "#ef4444", dash: "dash" } }],
   }, { responsive: true });
 }
 
@@ -277,8 +193,7 @@ function regeneratePath() {
 
 function refreshAllVisuals() {
   renderKPIs();
-  renderArmPlot("armPlot3d", false);
-  renderArmPlot("execPlot3d", true);
+  update3DViewers();
   renderTelemetryCharts();
   renderAuditTable();
   el("stepReadout").textContent = `${state.step} / ${state.waypoints.length}`;
@@ -313,6 +228,9 @@ function runSimulatedVisionQA() {
 }
 
 function init() {
+  viewerMain = new window.Meca500Viewer3D("armPlot3d");
+  viewerExec = new window.Meca500Viewer3D("execPlot3d");
+
   // Tabs
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -320,7 +238,11 @@ function init() {
       document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
       btn.classList.add("active");
       el(btn.dataset.tab).classList.add("active");
-      window.dispatchEvent(new Event("resize"));
+      setTimeout(() => {
+        if (viewerMain) viewerMain.resize();
+        if (viewerExec) viewerExec.resize();
+        window.dispatchEvent(new Event("resize"));
+      }, 40);
     });
   });
 
@@ -334,9 +256,9 @@ function init() {
   }
 
   el("resetJointsBtn").addEventListener("click", () => {
-    state.jointsDeg = [0, -15, 35, 0, 55, 0];
+    state.jointsDeg = [0, -24, 22, 0, 52, 0];
     syncJointSliders();
-    log("Joints reset to home posture.");
+    log("Joints reset to showcase posture.");
     refreshAllVisuals();
   });
 
@@ -395,7 +317,7 @@ function init() {
       state.jointsDeg = ik.jointsDeg;
       syncJointSliders();
       refreshAllVisuals();
-    }, 90);
+    }, 80);
   });
 
   el("pauseBtn").addEventListener("click", () => {

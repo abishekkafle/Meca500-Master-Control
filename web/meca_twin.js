@@ -1,15 +1,22 @@
 /**
- * Meca500 6-DOF Digital Twin Kinematics, Jacobian/Manipulability,
+ * Meca500 R3/R4 6-DOF Digital Twin Kinematics, Jacobian/Manipulability,
  * Toolpath Slicing, Collision Checking & Telemetry Engine.
- * Matches exact link geometry from backend/server.py.
+ *
+ * Official Mecademic Meca500 R3/R4 geometry (Z-up, right-handed, mm):
+ * - Base height to J2 shoulder axis:   135 mm
+ * - Upper arm (J2 -> J3):              135 mm (vertical +Z at J2 = 0)
+ * - Elbow Z-offset (J3 -> J4 axis):     38 mm
+ * - Forearm (J3 -> J5 wrist center):   120 mm (forward +X at J2=J3=0)
+ * - Wrist flange (J5 -> J6 flange):     70 mm (forward +X at J5 = 0)
  */
 
 const LINK_LENGTHS = {
   base_height: 135.0,
   upper_arm: 135.0,
-  forearm: 175.0,
-  wrist: 72.0,
-  extruder_offset: 50.0,
+  elbow_z: 38.0,
+  forearm: 120.0,
+  wrist: 70.0,
+  extruder_offset: 32.0,
 };
 
 // Meca500 official joint limits (degrees) & max angular speeds (deg/s)
@@ -42,49 +49,83 @@ function matMul4(A, B) {
   return C;
 }
 
-function dhMatrix(theta, d, a, alpha) {
-  const ct = Math.cos(theta), st = Math.sin(theta);
-  const ca = Math.cos(alpha), sa = Math.sin(alpha);
+function trans(x, y, z) {
   return [
-    [ct, -st * ca, st * sa, a * ct],
-    [st, ct * ca, -ct * sa, a * st],
-    [0, sa, ca, d],
+    [1, 0, 0, x],
+    [0, 1, 0, y],
+    [0, 0, 1, z],
     [0, 0, 0, 1],
   ];
 }
 
-function forwardKinematics(jointsRad) {
-  const dhParams = [
-    [jointsRad[0], LINK_LENGTHS.base_height, 0, -Math.PI / 2],
-    [jointsRad[1] + Math.PI / 2, 0, LINK_LENGTHS.upper_arm, 0],
-    [jointsRad[2], 0, LINK_LENGTHS.forearm, -Math.PI / 2],
-    [jointsRad[3], 0, 0, Math.PI / 2],
-    [jointsRad[4], 0, 0, -Math.PI / 2],
-    [jointsRad[5], LINK_LENGTHS.wrist, 0, 0],
-  ];
-
-  let T = [
+function rotX(a) {
+  const c = Math.cos(a), s = Math.sin(a);
+  return [
     [1, 0, 0, 0],
+    [0, c, -s, 0],
+    [0, s, c, 0],
+    [0, 0, 0, 1],
+  ];
+}
+
+function rotY(a) {
+  const c = Math.cos(a), s = Math.sin(a);
+  return [
+    [c, 0, s, 0],
     [0, 1, 0, 0],
+    [-s, 0, c, 0],
+    [0, 0, 0, 1],
+  ];
+}
+
+function rotZ(a) {
+  const c = Math.cos(a), s = Math.sin(a);
+  return [
+    [c, -s, 0, 0],
+    [s, c, 0, 0],
     [0, 0, 1, 0],
     [0, 0, 0, 1],
   ];
+}
+
+/**
+ * Exact Meca500 R3/R4 Forward Kinematics (matches Three.js scene graph 1:1).
+ * At [0,0,0,0,0,0]: J2=(0,0,135), J3=(0,0,270), J5=(120,0,308), Flange=(190,0,308).
+ */
+function forwardKinematics(jointsRad) {
+  const [q1, q2, q3, q4, q5, q6] = jointsRad;
+  let T = trans(0, 0, 0);
   const positions = [[0, 0, 0]];
 
-  for (const [theta, d, a, alpha] of dhParams) {
-    T = matMul4(T, dhMatrix(theta, d, a, alpha));
-    positions.push([T[0][3], T[1][3], T[2][3]]);
-  }
+  // J1: rotate around Z, up to shoulder J2
+  T = matMul4(T, rotZ(q1));
+  T = matMul4(T, trans(0, 0, LINK_LENGTHS.base_height));
+  positions.push([T[0][3], T[1][3], T[2][3]]); // J2 shoulder
 
-  const extMat = [
-    [1, 0, 0, 0],
-    [0, 1, 0, 0],
-    [0, 0, 1, -LINK_LENGTHS.extruder_offset],
-    [0, 0, 0, 1],
-  ];
-  const T_ext = matMul4(T, extMat);
-  const extruderTip = [T_ext[0][3], T_ext[1][3], T_ext[2][3]];
-  positions.push(extruderTip);
+  // J2: pitch around Y, up along upper arm to J3
+  T = matMul4(T, rotY(q2));
+  T = matMul4(T, trans(0, 0, LINK_LENGTHS.upper_arm));
+  positions.push([T[0][3], T[1][3], T[2][3]]); // J3 elbow
+
+  // J3: pitch around Y, elbow offset + forearm to J5 wrist center
+  T = matMul4(T, rotY(q3));
+  T = matMul4(T, trans(0, 0, LINK_LENGTHS.elbow_z));
+  positions.push([T[0][3], T[1][3], T[2][3]]); // J4 housing
+  T = matMul4(T, rotX(q4));
+  T = matMul4(T, trans(LINK_LENGTHS.forearm, 0, 0));
+  positions.push([T[0][3], T[1][3], T[2][3]]); // J5 wrist center
+
+  // J5: pitch around Y, wrist to J6 flange
+  T = matMul4(T, rotY(q5));
+  T = matMul4(T, trans(LINK_LENGTHS.wrist, 0, 0));
+  T = matMul4(T, rotX(q6));
+  const flangePos = [T[0][3], T[1][3], T[2][3]];
+  positions.push(flangePos); // J6 flange (index 5)
+
+  // Tool tip extending along flange +X
+  const T_tip = matMul4(T, trans(LINK_LENGTHS.extruder_offset, 0, 0));
+  const extruderTip = [T_tip[0][3], T_tip[1][3], T_tip[2][3]];
+  positions.push(extruderTip); // Tool tip (index 6)
 
   const sy = Math.sqrt(T[0][0] * T[0][0] + T[1][0] * T[1][0]);
   let aRot, bRot, cRot;
@@ -99,43 +140,57 @@ function forwardKinematics(jointsRad) {
   }
 
   const pose = {
-    x: +T[0][3].toFixed(2),
-    y: +T[1][3].toFixed(2),
-    z: +T[2][3].toFixed(2),
+    x: +flangePos[0].toFixed(2),
+    y: +flangePos[1].toFixed(2),
+    z: +flangePos[2].toFixed(2),
     a: +(aRot * RAD2DEG).toFixed(2),
     b: +(bRot * RAD2DEG).toFixed(2),
     c: +(cRot * RAD2DEG).toFixed(2),
   };
 
-  return { positions, pose, extruderTip };
+  return { positions, pose, flangePos, extruderTip };
 }
 
-function inverseKinematics(x, y, z, aDeg = -95, bDeg = 79, cDeg = 33) {
-  const roll = aDeg * DEG2RAD;
-  const pitch = bDeg * DEG2RAD;
-  const yaw = cDeg * DEG2RAD;
+/**
+ * Closed-form geometric Inverse Kinematics for upright Meca500 R3/R4.
+ * Keeps wrist pointing downward toward build plate (total pitch = pitchDeg, default 90° down).
+ */
+function inverseKinematics(x, y, z, aDeg = 0, bDeg = 90, cDeg = 0) {
+  const q1 = Math.atan2(y, x);
+  const pitchRad = bDeg * DEG2RAD; // 90 deg = flange pointing straight down (-Z)
 
-  const theta1 = Math.atan2(y, x);
-  const wx = x - LINK_LENGTHS.wrist * Math.cos(theta1) * Math.cos(pitch);
-  const wy = y - LINK_LENGTHS.wrist * Math.sin(theta1) * Math.cos(pitch);
-  const wz = z - LINK_LENGTHS.wrist * Math.sin(pitch);
+  // Wrist center backed off along flange axis
+  const rTarget = Math.hypot(x, y);
+  const wr = rTarget - LINK_LENGTHS.wrist * Math.cos(pitchRad);
+  const wz = z + LINK_LENGTHS.wrist * Math.sin(pitchRad);
 
   const L1 = LINK_LENGTHS.upper_arm;
-  const L2 = LINK_LENGTHS.forearm;
-  const xArm = Math.sqrt(wx * wx + wy * wy);
-  const zArm = wz - LINK_LENGTHS.base_height;
-  const D = Math.sqrt(xArm * xArm + zArm * zArm);
+  const L2eff = Math.hypot(LINK_LENGTHS.forearm, LINK_LENGTHS.elbow_z);
+  const elbowBeta = Math.atan2(LINK_LENGTHS.elbow_z, LINK_LENGTHS.forearm);
 
-  const reachable = D <= L1 + L2 - 1e-3 && D >= Math.abs(L1 - L2) + 1e-3;
-  const cosT3 = Math.max(-1, Math.min(1, (L1 * L1 + L2 * L2 - D * D) / (2 * L1 * L2)));
-  const theta3 = Math.PI - Math.acos(cosT3);
+  const dx = wr;
+  const dz = wz - LINK_LENGTHS.base_height;
+  const D = Math.hypot(dx, dz);
 
-  const alpha = Math.atan2(zArm, xArm);
-  const cosBeta = Math.max(-1, Math.min(1, (L1 * L1 + D * D - L2 * L2) / Math.max(2 * L1 * D, 1e-9)));
-  const beta = Math.acos(cosBeta);
-  const theta2 = alpha + beta - Math.PI / 2;
+  const reachable = D <= L1 + L2eff - 0.5 && D >= Math.abs(L1 - L2eff) + 0.5;
+  const cosGamma = Math.max(-1, Math.min(1, (L1 * L1 + L2eff * L2eff - D * D) / (2 * L1 * L2eff)));
+  const gamma = Math.acos(cosGamma); // interior elbow angle
 
-  const jointsRad = [theta1, theta2, theta3, roll, pitch, yaw - theta1];
+  const cosPhi = Math.max(-1, Math.min(1, (L1 * L1 + D * D - L2eff * L2eff) / Math.max(2 * L1 * D, 1e-9)));
+  const phi = Math.acos(cosPhi);
+  const elev = Math.atan2(dz, dx); // angle from +r toward +z
+
+  // Elbow-up configuration (like reference photo)
+  const shoulderFromZ = Math.PI / 2 - (elev + phi);
+  const q2 = shoulderFromZ;
+  const q3 = Math.PI / 2 - gamma + elbowBeta;
+
+  // Keep tool pitch at pitchRad (q2 + q3 + q5 = pitchRad)
+  const q4 = aDeg * DEG2RAD;
+  const q5 = pitchRad - q2 - q3;
+  const q6 = cDeg * DEG2RAD;
+
+  const jointsRad = [q1, q2, q3, q4, q5, q6];
   const jointsDeg = jointsRad.map((r) => +(r * RAD2DEG).toFixed(2));
   const limitViolations = [];
   jointsDeg.forEach((deg, i) => {
@@ -147,22 +202,20 @@ function inverseKinematics(x, y, z, aDeg = -95, bDeg = 79, cDeg = 33) {
 }
 
 /**
- * Numerical 3x6 positional Jacobian & Yoshikawa manipulability index:
- * w = sqrt(det(J * J^T)) normalized so typical workspace ~ 0.4 - 1.0.
+ * Numerical 3x6 positional Jacobian & Yoshikawa manipulability index using unrounded flangePos.
  */
 function computeManipulability(jointsRad) {
   const eps = 1e-4;
-  const base = forwardKinematics(jointsRad).positions[6];
+  const base = forwardKinematics(jointsRad).flangePos;
   const J = [[], [], []];
   for (let j = 0; j < 6; j++) {
     const q = [...jointsRad];
     q[j] += eps;
-    const p = forwardKinematics(q).positions[6];
+    const p = forwardKinematics(q).flangePos;
     J[0].push((p[0] - base[0]) / eps);
     J[1].push((p[1] - base[1]) / eps);
     J[2].push((p[2] - base[2]) / eps);
   }
-  // 3x3 M = J * J^T
   const M = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
   for (let r = 0; r < 3; r++) {
     for (let c = 0; c < 3; c++) {
@@ -177,13 +230,11 @@ function computeManipulability(jointsRad) {
     M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
 
   const raw = Math.sqrt(Math.max(det, 0));
-  // Normalize by characteristic link volume (175^3)
-  const norm = Math.min(1.5, raw / (175 * 175 * 175) * 4.5);
-  const singularityRisk = norm < 0.12 ? "HIGH" : norm < 0.28 ? "MODERATE" : "LOW";
+  const norm = Math.min(1.5, (raw / (140 * 140 * 140)) * 2.5);
+  const singularityRisk = norm < 0.14 ? "HIGH" : norm < 0.30 ? "MODERATE" : "LOW";
   return { index: +norm.toFixed(3), singularityRisk };
 }
 
-// ------------------------------------------------------------------ Collision & Keep-Out Checker
 function checkPointCollision(pt, obstacle, floorZ = 0) {
   const [x, y, z] = pt;
   if (z < floorZ) return "Floor Z-collision";
@@ -199,7 +250,6 @@ function checkPointCollision(pt, obstacle, floorZ = 0) {
   return null;
 }
 
-// ------------------------------------------------------------------ Toolpath & Infill Generators
 function generateToolpath(opts) {
   const { mode, shape, pattern, x, y, z, size, zStep, layers, density, a, b, c } = opts;
   const pts = [];
@@ -232,7 +282,6 @@ function generateToolpath(opts) {
         }
       }
     } else {
-      // Infill modes: outer perimeter + pattern
       pts.push([x, y, cz], [x + size, y, cz], [x + size, y + size, cz], [x, y + size, cz], [x, y, cz]);
       const spacing = Math.max(4, (1.15 - dFactor) * 18);
       if (pattern === "rectilinear") {
@@ -254,7 +303,6 @@ function generateToolpath(opts) {
         for (let i = 1; i < lines; i++) pts.push([x, y + i * spacing, cz], [x + size, y + i * spacing, cz]);
         for (let j = 1; j < lines; j++) pts.push([x + j * spacing, y, cz], [x + j * spacing, y + size, cz]);
       } else {
-        // Honeycomb
         const rows = Math.max(1, Math.floor(size / spacing));
         for (let r = 0; r < rows; r++) {
           const yr = y + r * spacing;
@@ -269,8 +317,8 @@ function generateToolpath(opts) {
   return { waypoints: pts, commands };
 }
 
-function parseGCodeToMeca(gcode, a = -95, b = 79, c = 33) {
-  let cx = 180, cy = -30, cz = 60;
+function parseGCodeToMeca(gcode, a = 0, b = 90, c = 0) {
+  let cx = 160, cy = -25, cz = 75;
   const waypoints = [], commands = [];
   for (const raw of gcode.split(/\r?\n/)) {
     const line = raw.split(";")[0].trim();
@@ -288,18 +336,10 @@ function parseGCodeToMeca(gcode, a = -95, b = 79, c = 33) {
   return { waypoints, commands };
 }
 
-// ------------------------------------------------------------------ Full Trajectory Pre-Flight Audit & Telemetry
 function auditTrajectory(waypoints, poseAngles, feedRateMmS = 45, obstacle = null) {
-  let totalDist = 0;
-  let totalTime = 0;
-  const times = [];
-  const jointHistory = [[], [], [], [], [], []];
-  const manipHistory = [];
-  const issues = [];
-  let maxJointSpeedPct = 0;
-
-  let prevPt = null;
-  let prevDeg = null;
+  let totalDist = 0, totalTime = 0, maxJointSpeedPct = 0;
+  const times = [], jointHistory = [[], [], [], [], [], []], manipHistory = [], issues = [];
+  let prevPt = null, prevDeg = null;
 
   waypoints.forEach((pt, idx) => {
     let dt = 0.08;

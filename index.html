@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Meca500 6-DOF Automation Digital Twin</title>
   <link rel="stylesheet" href="web/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 </head>
 <body>
@@ -58,8 +60,8 @@
         </div>
 
         <div class="card">
-          <h3>Interactive 3D Meca500 Digital Twin</h3>
-          <p class="subtitle">Cyan = 6-DOF arm links • Orange = extruder nozzle • Teal = planned toolpath • Red box = keep-out fixture zone.</p>
+          <h3>Interactive 3D Meca500 Digital Twin (Three.js CAD Model)</h3>
+          <p class="subtitle">Drag to orbit • Scroll to zoom • Brushed-aluminum 6-axis Meca500 + ISO flange + build plate + red keep-out collision zone.</p>
           <div id="armPlot3d" class="plot-3d"></div>
         </div>
       </div>
@@ -211,6 +213,7 @@ G1 X165 Y-30 Z68 F2400</textarea>
   </footer>
 
   <script src="web/meca_twin.js"></script>
+  <script src="web/meca_3d.js"></script>
   <script src="web/app.js"></script>
 </body>
 </html>
