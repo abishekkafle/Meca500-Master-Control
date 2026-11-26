@@ -1,28 +1,40 @@
-# MECA 500 Master Control Platform
+# MECA 500 Master Control & 6-DOF Automation Digital Twin
 
-An integrated robotics software platform for the **Mecademic Meca500 (Six-Axis Industrial Robot)**, combining 6-DOF Kinematic Solvers, Parametric & Infill Toolpath Planning, 3D Mesh Surface Point-Cloud Scanning, G-code Conversion, Real-Time TCP Execution/Simulation, and Vision Defect Inspection into a unified full-stack application.
+**Live Interactive Digital Twin (GitHub Pages):** [https://abishekkafle.github.io/Meca500-Master-Control/](https://abishekkafle.github.io/Meca500-Master-Control/)
+
+An integrated robotics & automation digital twin platform for the **Mecademic Meca500 (Six-Axis Industrial Robot)**, combining 6-DOF Denavit-Hartenberg Kinematics, **Jacobian / Yoshikawa Manipulability & Singularity Monitoring**, **Virtual Keep-Out Fixture Collision Interlocks**, **Joint-Velocity & Cycle-Time Telemetry**, Parametric & Infill Toolpath Planning, 3D Mesh Point-Cloud Scanning, G-code Conversion, Real-Time TCP Execution/Simulation, and Vision Defect Inspection.
+
+---
+
+## 🌐 Instant Live Digital Twin (No Installation Needed)
+
+Open `index.html` locally or visit **GitHub Pages** (`https://abishekkafle.github.io/Meca500-Master-Control/`) to interact directly in the browser:
+- **3D 6-DOF Arm Twin & Kinematics:** Real-time DH Forward & Inverse Kinematics with reachability and joint-limit validation.
+- **Singularity & Manipulability Monitor:** Computes numerical positional Jacobian $J$ and Yoshikawa manipulability $\sqrt{\det(JJ^T)}$ across the entire toolpath.
+- **Safety Pre-Flight & Collision Interlocks:** Configurable 3D keep-out fixture bounding box, floor Z-collision check, and peak joint-speed (% of Meca500 rated limits) audit.
+- **Toolpath Slicer & MecaScript Export:** Shapes (Spiral, Rectangle, Cylinder, Mesh Grid), Additive Infills (Rectilinear, Concentric, Grid, Honeycomb), and G-Code → `MovePose(...)` export.
+- **Closed-Loop Vision QA Simulator:** Mirrors the backend CLAHE + 6-state Kalman `PrecisionTracker` interlock logic.
 
 ---
 
 ## 📁 Repository Structure
 
 ```text
-MECA500_Master_App_Submission/
-├── README.md                      # Primary Project Documentation
-├── requirements.txt                # Python Backend Package Dependencies
-├── run_app.bat                     # One-Click Double-Click Windows Batch Launcher
+Meca500-Master-Control/
+├── index.html                      # Zero-backend 3D Digital Twin (GitHub Pages entry)
+├── web/
+│   ├── styles.css                  # Industrial dark-slate telemetry UI
+│   ├── meca_twin.js                # 6-DOF DH Kinematics, Jacobian, Collision & Audit Engine
+│   └── app.js                      # Interactive 3D Plotly Twin & Playback Controller
 ├── backend/
-│   ├── server.py                   # FastAPI REST Server & Kinematics Engine
+│   ├── server.py                   # FastAPI REST Server, TCP Port 10000 & OpenCV/Open3D Engine
 │   └── requirements.txt            # Backend Python Dependencies
-├── frontend/
-│   ├── package.json                # React Frontend Package Dependencies
-│   ├── public/                     # Static HTML & Web Assets
-│   └── src/
-│       ├── App.js                  # Master React App UI Component
-│       ├── App.css                 # Glassmorphic Dark Mode Design System
-│       └── index.js                # React Entry Point
-└── sample_models/
-    └── sample_cube.stl             # Sample 3D Model for Slicing & Surface Scanning
+├── frontend/                       # React Full-Stack Control Dashboard
+├── tests/
+│   └── test_kinematics_twin.py     # Pytest verification suite for kinematics & toolpaths
+├── sample_models/
+│   └── sample_cube.stl             # Sample 3D Model for Slicing & Surface Scanning
+└── run_app.bat                     # One-Click Windows Full-Stack Launcher
 ```
 
 ---
