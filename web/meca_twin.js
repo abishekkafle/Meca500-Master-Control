@@ -152,15 +152,15 @@ function inverseKinematics(x, y, z, aDeg = -95, bDeg = 79, cDeg = 33) {
  */
 function computeManipulability(jointsRad) {
   const eps = 1e-4;
-  const base = forwardKinematics(jointsRad).pose;
+  const base = forwardKinematics(jointsRad).positions[6];
   const J = [[], [], []];
   for (let j = 0; j < 6; j++) {
     const q = [...jointsRad];
     q[j] += eps;
-    const p = forwardKinematics(q).pose;
-    J[0].push((p.x - base.x) / eps);
-    J[1].push((p.y - base.y) / eps);
-    J[2].push((p.z - base.z) / eps);
+    const p = forwardKinematics(q).positions[6];
+    J[0].push((p[0] - base[0]) / eps);
+    J[1].push((p[1] - base[1]) / eps);
+    J[2].push((p[2] - base[2]) / eps);
   }
   // 3x3 M = J * J^T
   const M = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
